@@ -1,4 +1,0 @@
-[submodule "improved-wgan-pytorch"]
-	path = improved-wgan-pytorch
-	url = git@github.com:jalola/improved-wgan-pytorch.git
-	branch = master
