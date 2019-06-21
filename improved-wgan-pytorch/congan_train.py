@@ -20,8 +20,36 @@ from torchvision import datasets, transforms
 import libs as lib
 import libs.plot
 from models.conwgan import GoodDiscriminator, GoodGenerator, MyConvo2d, set_dims
+import logging
 
 sys.path.append(os.getcwd())
+
+logger = logging.getLogger(__name__)
+
+
+def setup_logging(filename: str = "log.txt", level: str = "INFO"):
+    """
+    Setup global loggers.
+
+    Args:
+        filename: Log file destination.
+        level: Log level.
+    """
+    # Make sure the directory actually exists
+    ensure_dir(os.path.dirname(filename))
+
+    # Check if previous log exists since logging.FileHandler only appends
+    if os.path.exists(filename):
+        os.remove(filename)
+
+    logging.basicConfig(
+        level=logging.getLevelName(level.upper()),
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(stream=sys.stdout),
+            logging.FileHandler(filename=filename),
+        ],
+    )
 
 
 def set_cuda_device(cuda_device_id):
@@ -40,8 +68,8 @@ def make_multi_gpu(model):
 
     # Check if multiple cuda devices are selected
     if multi_gpu:
-        print("Using multiple gpus")
-        print("args.cuda_device_id=%s" % args.cuda_device_id)
+        logger.info("Using multiple gpus")
+        logger.info("args.cuda_device_id=%s" % args.cuda_device_id)
         num_cuda_devices = torch.cuda.device_count()
 
         if args.cuda_device_id[0] == -1:
@@ -52,12 +80,12 @@ def make_multi_gpu(model):
 
         # Check if multiple cuda devices are available
         if num_cuda_devices > 1:
-            print("Running experiment on the following GPUs: %s" % cuda_device_id)
+            logger.info("Running experiment on the following GPUs: %s" % cuda_device_id)
 
             # Transform model into data parallel model on all selected cuda deviecs
             model = torch.nn.DataParallel(model, device_ids=cuda_device_id)
         else:
-            print(
+            logger.info(
                 "Attempted to run the experiment on multiple GPUs while only %s GPU was available"
                 % num_cuda_devices
             )
@@ -139,6 +167,9 @@ def parse_args():
         "--data-dir", help="path to the result directory", metavar="DIR", required=True
     )
     parser.add_argument(
+        "--restore", help="path to the restore directory", metavar="DIR"
+    )
+    parser.add_argument(
         "--result-dir",
         default="results",
         help="path to the result directory",
@@ -160,6 +191,9 @@ def parse_args():
         default=10000,
         metavar="N",
         help="How may iterations to train the critic for.",
+    )
+    parser.add_argument(
+        "--log-iter", type=int, default=100, metavar="N", help="Log after N iterations."
     )
     parser.add_argument(
         "--lamb",
@@ -229,9 +263,9 @@ def parse_args():
 
 def print_args(args):
     """Print all experiment arguments."""
-    print("Experiment started with the following arguments:")
+    logger.info("Experiment started with the following arguments:")
     for key, value in sorted(vars(args).items(), key=lambda x: x[0]):
-        print(f"{key: <15} {value}")
+        logger.info(f"{key: <15} {value}")
 
 
 # import sklearn.datasets
@@ -258,7 +292,7 @@ if len(DATA_DIR) == 0:
     raise Exception("Please specify path to data directory in gan_64x64.py!")
 
 RESTORE_MODE = (
-    False
+    args.restore
 )  # if True, it will load saved model from OUT_PATH and continue to train
 START_ITER = 0  # starting iteration
 OUTPUT_PATH = generate_run_base_dir(
@@ -279,15 +313,19 @@ ACGAN_SCALE = (
 ACGAN_SCALE_G = (
     args.acgan_scale_g
 )  # How to scale generator's ACGAN loss relative to WGAN loss
-LOG_ITER = 200
+LOG_ITER = args.log_iter
 
+
+setup_logging(os.path.join(OUTPUT_PATH, "log.txt"))
 set_dims(DIM, OUTPUT_DIM)
 
 
 def showMemoryUsage(device=1):
     gpu_stats = gpustat.GPUStatCollection.new_query()
     item = gpu_stats.jsonify()["gpus"][device]
-    print("Used/total: " + "{}/{}".format(item["memory.used"], item["memory.total"]))
+    logger.info(
+        "Used/total: " + "{}/{}".format(item["memory.used"], item["memory.total"])
+    )
 
 
 def weights_init(m):
@@ -326,35 +364,6 @@ def plot_sample(x, y):
 
 
 def load_data(path_to_folder, classes):
-    # data_transform = transforms.Compose(
-    #     [
-    #         transforms.Scale(64),
-    #         transforms.CenterCrop(64),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    #     ]
-    # )
-    # dataset = datasets.LSUN(
-    #     path_to_folder,
-    #     classes=[
-    #         "dining_room_train",
-    #         "bridge_train",
-    #         "restaurant_train",
-    #         "tower_train",
-    #     ],
-    #     transform=data_transform,
-    # )
-    # dataset_loader = torch.utils.data.DataLoader(
-    #     dataset,
-    #     batch_size=BATCH_SIZE,
-    #     shuffle=True,
-    #     num_workers=5,
-    #     drop_last=True,
-    #     pin_memory=True,
-    # )
-    # __import__("ipdb").set_trace(context=13)
-    # return dataset_loader
-
     """Load the dataset."""
     # Data transformations
     data_transform = transforms.Compose(
@@ -362,20 +371,32 @@ def load_data(path_to_folder, classes):
             transforms.Resize((args.dim, args.dim)),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.5458, 0.4443, 0.3443], std=[0.2201, 0.2304, 0.2288]
+                mean=data_means.cpu().numpy(), std=data_stds.cpu().numpy()
             ),
         ]
     )
 
     classes = set(classes)
 
-    def filter_by_classes(path):
+    def filter_data(path):
         """Filter files by selected classes."""
-        return path.split("/")[-2] in classes
+        conditions_and = []
+        conditions_or = [True]
+        conditions_and.append(path.split("/")[-2] in classes)
+
+        # conditions_or.append(path.endswith("pizza/1001116.jpg"))
+        # conditions_or.append(path.endswith("pizza/1008104.jpg"))
+        # conditions_or.append(path.endswith("pizza/1008144.jpg"))
+
+        # conditions_or.append(path.endswith("pancakes/1006982.jpg"))
+        # conditions_or.append(path.endswith("pancakes/1008491.jpg"))
+        # conditions_or.append(path.endswith("pancakes/1009131.jpg"))
+
+        return all(conditions_and) and any(conditions_or)
 
     # Define dataset via imagefolder
     dataset = datasets.ImageFolder(
-        root=path_to_folder, transform=data_transform, is_valid_file=filter_by_classes
+        root=path_to_folder, transform=data_transform, is_valid_file=filter_data
     )
     ####### {{{
     # Custom code copied from datasets.folder.DatasetFolder to support partial selection of classes
@@ -383,7 +404,7 @@ def load_data(path_to_folder, classes):
     class_to_idx = {TRAINING_CLASS[i]: i for i in range(NUM_CLASSES)}
 
     samples = datasets.folder.make_dataset(
-        dataset.root, class_to_idx, None, filter_by_classes
+        dataset.root, class_to_idx, None, filter_data
     )
     if len(samples) == 0:
         raise (RuntimeError("Found 0 files in subfolders of: " + dataset.root + "\n"))
@@ -403,8 +424,6 @@ def load_data(path_to_folder, classes):
         drop_last=True,
         pin_memory=True,
     )
-    plot_sample(*next(iter(dataset_loader)))
-    exit()
     return dataset_loader
 
 
@@ -419,12 +438,12 @@ def compute_means_stds(train_loader):
         mean += data.mean(2).sum(0)
         std += data.std(2).sum(0)
         nb_samples += batch_samples
-        print(nb_samples / len(train_loader.dataset) * 100)
+        logger.info(nb_samples / len(train_loader.dataset) * 100)
 
     mean /= nb_samples
     std /= nb_samples
-    print("Means:", mean)
-    print("Stds:", std)
+    logger.info("Means:", mean)
+    logger.info("Stds:", std)
     exit()
 
 
@@ -466,7 +485,8 @@ def generate_image(netG, noise=None):
     samples = netG(noisev)
     samples = samples.view(BATCH_SIZE, 3, DIM, DIM)
 
-    samples = samples * 0.5 + 0.5
+    # Remove normalization
+    samples = samples * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
 
     return samples
 
@@ -488,14 +508,18 @@ def gen_rand_noise_with_label(label=None):
 
 cuda_available = torch.cuda.is_available()
 device = torch.device("cuda" if cuda_available else "cpu")
+
+data_means = torch.tensor([0.5458, 0.4443, 0.3443]).to(device)
+data_stds = torch.tensor([0.2201, 0.2304, 0.2288]).to(device)
+
 fixed_label = []
 for c in range(BATCH_SIZE):
     fixed_label.append(c % NUM_CLASSES)
 fixed_noise = gen_rand_noise_with_label(fixed_label)
 
 if RESTORE_MODE:
-    aG = torch.load(OUTPUT_PATH + "generator.pt")
-    aD = torch.load(OUTPUT_PATH + "discriminator.pt")
+    aG = torch.load(os.path.join(args.restore, "generator.pt"))
+    aD = torch.load(os.path.join(args.restore, "discriminator.pt"))
 else:
     aG = GoodGenerator(DIM, DIM * DIM * 3)
     aD = GoodDiscriminator(DIM, NUM_CLASSES)
@@ -504,8 +528,8 @@ else:
     aD.apply(weights_init)
 
 LR = 1e-4
-optimizer_g = torch.optim.Adam(aG.parameters(), lr=LR, betas=(0, 0.9))
-optimizer_d = torch.optim.Adam(aD.parameters(), lr=LR, betas=(0, 0.9))
+optimizer_g = torch.optim.Adam(aG.parameters(), lr=LR, betas=(0.5, 0.9))
+optimizer_d = torch.optim.Adam(aD.parameters(), lr=LR, betas=(0.5, 0.9))
 
 aux_criterion = nn.CrossEntropyLoss()  # nn.NLLLoss()
 
@@ -517,7 +541,6 @@ aD = make_multi_gpu(aD)
 writer = SummaryWriter()
 # Reference: https://github.com/caogang/wgan-gp/blob/master/gan_cifar10.py
 def train():
-    # writer = SummaryWriter()
     dataloader = load_data(DATA_DIR, TRAINING_CLASS)
     dataiter = iter(dataloader)
     for iteration in tqdm(range(START_ITER, END_ITER)):
@@ -563,7 +586,7 @@ def train():
             real_data = batch[0]  # batch[1] contains labels
             real_data.requires_grad_(True)
             real_label = batch[1]
-            # print("r_label" + str(r_label))
+            # logger.info("r_label" + str(r_label))
 
             real_data = real_data.to(device)
             real_label = real_label.to(device)
@@ -614,6 +637,7 @@ def train():
                         body_model = aD.conv1
                     layer1 = body_model.conv
                     xyz = layer1.weight.data.clone()
+
                     tensor = xyz.cpu()
                     tensors = torchvision.utils.make_grid(tensor, nrow=8, padding=1)
                     writer.add_image("D/conv1", tensors, iteration)
