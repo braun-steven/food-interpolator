@@ -1,4 +1,18 @@
 # Milestones
+
+## 25.07
+- **Overfitting Results**
+  - Trained WGAN-GP (with Auxillary Classifier) on the following images:
+    - <img src="./food-samples/overfit/1001116.jpg" width="64px"/> <img src="./food-samples/overfit/1008104.jpg" width="64px"/> <img src="./food-samples/overfit/1008144.jpg" width="64px"/> <img src="./food-samples/overfit/1006982.jpg" width="64px"/> <img src="./food-samples/overfit/1008491.jpg" width="64px"/> <img src="./food-samples/overfit/1009131.jpg" width="64px"/>
+  - Results:
+    - <img src="./food-samples/overfit/generated.jpg"/>
+  - Metrics:
+    - <img src="./food-samples/overfit/metrics/train_disc_cost.jpg"/>
+    - <img src="./food-samples/overfit/metrics/train_gen_cost.jpg"/>
+    - <img src="./food-samples/overfit/metrics/wasserstein_distance.jpg"/>
+
+
+
 ## 18.06
 - **Basic Model Implementation**
   - We have chosen *PyTorch* as the deep learning framework since its dynamic computation graph and eager evaluation allows us to quickly protoype and debug our experiments
