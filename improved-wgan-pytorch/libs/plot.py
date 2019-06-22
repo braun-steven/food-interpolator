@@ -38,7 +38,7 @@ def flush():
         plt.clf()
         plt.plot(x_vals, y_vals)
         plt.xlabel("iteration")
-        plt.ylabel(name)
+        plt.ylabel(name.split("/")[-1])
         plt.savefig(name.replace(" ", "_") + ".jpg")
 
     print("iter {}\t{}".format(_iter[0], "\t".join(prints)))

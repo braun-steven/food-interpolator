@@ -1,15 +1,23 @@
 # Milestones
 
 ## 25.07
-- **Overfitting Results**
+### Overfitting Results
   - Trained WGAN-GP (with Auxillary Classifier) on the following images:
     - <img src="./food-samples/overfit/1001116.jpg" width="64px"/> <img src="./food-samples/overfit/1008104.jpg" width="64px"/> <img src="./food-samples/overfit/1008144.jpg" width="64px"/> <img src="./food-samples/overfit/1006982.jpg" width="64px"/> <img src="./food-samples/overfit/1008491.jpg" width="64px"/> <img src="./food-samples/overfit/1009131.jpg" width="64px"/>
   - Results:
-    - <img src="./food-samples/overfit/generated.jpg"/>
+    - <img src="./results/190621_1614_pizza_pancakes_small/samples_9999.png"/>
   - Metrics:
-    - <img src="./food-samples/overfit/metrics/train_disc_cost.jpg"/>
-    - <img src="./food-samples/overfit/metrics/train_gen_cost.jpg"/>
-    - <img src="./food-samples/overfit/metrics/wasserstein_distance.jpg"/>
+    - <img src="./results/190621_1614_pizza_pancakes_small/train_disc_cost.jpg"/>
+    - <img src="./results/190621_1614_pizza_pancakes_small/train_gen_cost.jpg"/>
+    - <img src="./results/190621_1614_pizza_pancakes_small/wasserstein_distance.jpg"/>
+
+### First run with all samples from Pizza and Pancakes
+- Generated images
+  - <img src="./results/190621_1832_pizza_pancakes_big/samples_9999.png"/>
+- Metrics:
+  - <img src="./results/190621_1832_pizza_pancakes_big/train_disc_cost.jpg"/>
+  - <img src="./results/190621_1832_pizza_pancakes_big/train_gen_cost.jpg"/>
+  - <img src="./results/190621_1832_pizza_pancakes_big/wasserstein_distance.jpg"/>
 
 
 
