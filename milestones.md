@@ -19,7 +19,7 @@
   - <img src="./results/190621_1832_pizza_pancakes_big/train_gen_cost.jpg"/>
   - <img src="./results/190621_1832_pizza_pancakes_big/wasserstein_distance.jpg"/>
 
-### 
+### Dataset Switch
 - The image quality of samples from Food 101 might not be good enough:
   - only 1k samples per class
   - bad lightening
