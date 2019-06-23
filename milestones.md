@@ -19,6 +19,22 @@
   - <img src="./results/190621_1832_pizza_pancakes_big/train_gen_cost.jpg"/>
   - <img src="./results/190621_1832_pizza_pancakes_big/wasserstein_distance.jpg"/>
 
+### 
+- The image quality of samples from Food 101 might not be good enough:
+  - only 1k samples per class
+  - bad lightening
+  - different angles
+  - differen scales
+  - includes many other (non-food) objects 
+  - Comparison:
+    - Burger data: Google (left) vs Food 101 (right)
+<img src="./food-samples/dataset-switch/burger-google.png" width="350px"/><img src="./food-samples/dataset-switch/burger-food-101.png" width="350px"/>
+    - Pizza data: Google (left) vs Food 101 (right)
+<img src="./food-samples/dataset-switch/pizza-google.png" width="350px"/><img src="./food-samples/dataset-switch/pizza-food-101.png" width="350px"/>
+- => Create our own dataset from google
+  - use [Google Images Download](https://github.com/hardikvasa/google-images-download)
+  - Start with two classes (pizza, burger)
+  - download > 10k images per class
 
 
 ## 18.06
