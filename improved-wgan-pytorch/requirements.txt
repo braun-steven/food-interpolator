@@ -30,8 +30,8 @@ pyparsing==2.4.0
 python-dateutil==2.8.0
 six==1.12.0
 tb-nightly==1.15.0a20190619
-torch==1.1.0
-torchvision==0.3.0
+torch==0.4.1
+torchvision==0.2.2
 traitlets==4.3.2
 wcwidth==0.1.7
 Werkzeug==0.15.4

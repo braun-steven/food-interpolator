@@ -220,6 +220,191 @@ class FCGenerator(nn.Module):
         return output
 
 
+# class GoodGenerator(nn.Module):
+#     def __init__(self, dim=DIM, output_dim=OUTPUT_DIM):
+#         super(GoodGenerator, self).__init__()
+
+#         self.dim = dim
+
+#         # self.ln1 = nn.Linear(128, 4 * 4 * 8 * self.dim)
+#         # self.rbs = nn.Sequential(
+#         #     ResidualBlock(8 * self.dim, 8 * self.dim, 3, resample="up"),
+#         #     ResidualBlock(8 * self.dim, 4 * self.dim, 3, resample="up"),
+#         #     ResidualBlock(4 * self.dim, 2 * self.dim, 3, resample="up"),
+#         #     ResidualBlock(2 * self.dim, 1 * self.dim, 3, resample="up"),
+#         #     ResidualBlock(1 * self.dim, int(1 / 2 * self.dim), 3, resample="up"),
+#         #     ResidualBlock(
+#         #         int(1 / 2 * self.dim), int(1 / 4 * self.dim), 3, resample="up"
+#         #     ),
+#         # )
+
+#         self.ln1 = nn.Linear(128, 4 * 4 * 128 * 2 ** 3)
+#         n_blocks = 6
+#         blocks = []
+#         for i in range(n_blocks):
+#             blocks.append(
+#                 ResidualBlock(
+#                     input_dim=int(128 * 2 ** (3 - i)),
+#                     output_dim=int(128 * 2 ** (2 - i)),
+#                     kernel_size=3,
+#                     resample="up",
+#                 )
+#             )
+#         self.rbs = nn.Sequential(*blocks)
+#         channels = int(128 * 2 ** (3 - n_blocks))
+#         self.bn = nn.BatchNorm2d(channels)
+
+#         self.conv1 = MyConvo2d(channels, 3, 3)
+#         self.relu = nn.ReLU()
+#         self.tanh = nn.Tanh()
+
+#     def forward(self, input):
+#         output = self.ln1(input.contiguous())
+#         output = output.view(input.shape[0], 128 * 2 ** 3, 4, 4)
+#         output = self.rbs(output)
+
+#         output = self.bn(output)
+#         output = self.relu(output)
+#         output = self.conv1(output)
+#         output = self.tanh(output)
+#         output = output.view(input.shape[0], OUTPUT_DIM)
+#         return output
+
+
+# class GoodDiscriminator(nn.Module):
+#     def __init__(self, dim=DIM, num_class=2):
+#         super(GoodDiscriminator, self).__init__()
+
+#         self.dim = dim
+#         self.num_class = num_class
+#         self.conv1 = MyConvo2d(3, 128 * 2 ** 3, 3, he_init=False)
+
+#         blocks = []
+#         for i in range(5, 0, -1):
+#             ResidualBlock(
+#                 input_dim=int(128 * 2 ** (2 - i)),
+#                 output_dim=int(128 * 2 ** (3 - i)),
+#                 kernel_size=3,
+#                 resample="down",
+#                 hw=int(DIM / 2 ** (5 - i)),
+#             )
+#         self.rbs = nn.Sequential(*blocks)
+#         # self.rbs = nn.Sequential(
+#         #     ResidualBlock(
+#         #         int(1 / 4 * self.dim), int(1 / 2 * self.dim), 3, resample="down", hw=DIM
+#         #     ),
+#         #     ResidualBlock(
+#         #         int(1 / 2 * self.dim), 1 * self.dim, 3, resample="down", hw=DIM
+#         #     ),
+#         #     ResidualBlock(self.dim, 2 * self.dim, 3, resample="down", hw=DIM),
+#         #     ResidualBlock(
+#         #         2 * self.dim, 4 * self.dim, 3, resample="down", hw=int(DIM / 2)
+#         #     ),
+#         #     ResidualBlock(
+#         #         4 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 4)
+#         #     ),
+#         #     ResidualBlock(
+#         #         8 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 8)
+#         #     ),
+#         #     ResidualBlock(
+#         #         8 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 16)
+#         #     ),
+#         #     ResidualBlock(
+#         #         8 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 32)
+#         #     ),
+#         # )
+#         self.ln1 = nn.Linear(1024 * 256 ** 2, 1)
+#         self.ln2 = nn.Linear(1024 * 256 ** 2, self.num_class)
+
+#     def forward(self, input):
+#         output = input.contiguous()
+#         output = output.view(input.shape[0], 3, DIM, DIM)
+#         output = self.conv1(output)
+#         output = self.rbs(output)
+#         output = output.view(input.shape[0], 1024 * 256 ** 2)
+#         output_wgan = self.ln1(output)
+#         output_wgan = output_wgan.view(-1)
+#         output_congan = self.ln2(output)
+#         return output_wgan, output_congan
+
+
+# class GoodGenerator(nn.Module):
+#     def __init__(self, dim=DIM, output_dim=OUTPUT_DIM):
+#         super(GoodGenerator, self).__init__()
+
+#         self.dim = dim
+
+#         self.ln1 = nn.Linear(128, 4 * 4 * 8 * self.dim)
+#         self.rb1 = ResidualBlock(8 * self.dim, 8 * self.dim, 3, resample="up")
+#         self.rb2 = ResidualBlock(8 * self.dim, 4 * self.dim, 3, resample="up")
+#         self.rb3 = ResidualBlock(4 * self.dim, 2 * self.dim, 3, resample="up")
+#         self.rb4 = ResidualBlock(2 * self.dim, 1 * self.dim, 3, resample="up")
+#         self.rb5 = ResidualBlock(1 * self.dim, int(1 / 2 * self.dim), 3, resample="up")
+#         self.bn = nn.BatchNorm2d(int(1 / 2 * self.dim))
+
+#         self.conv1 = MyConvo2d(int(1 / 2 * self.dim), 3, 3)
+#         self.relu = nn.ReLU()
+#         self.tanh = nn.Tanh()
+
+#     def forward(self, input):
+#         output = self.ln1(input.contiguous())
+#         output = output.view(-1, 8 * self.dim, 4, 4)
+#         output = self.rb1(output)
+#         output = self.rb2(output)
+#         output = self.rb3(output)
+#         output = self.rb4(output)
+#         output = self.rb5(output)
+
+#         output = self.bn(output)
+#         output = self.relu(output)
+#         output = self.conv1(output)
+#         output = self.tanh(output)
+#         output = output.view(-1, OUTPUT_DIM)
+#         return output
+
+
+# class GoodDiscriminator(nn.Module):
+#     def __init__(self, dim=DIM, num_class=2):
+#         super(GoodDiscriminator, self).__init__()
+
+#         self.dim = dim
+#         self.num_class = num_class
+#         self.conv1 = MyConvo2d(3, int(1 / 2 * self.dim), 3, he_init=False)
+#         self.rb1 = ResidualBlock(
+#             int(1 / 2 * self.dim), 1 * self.dim, 3, resample="down", hw=DIM
+#         )
+#         self.rb2 = ResidualBlock(
+#             1 * self.dim, 2 * self.dim, 3, resample="down", hw=int(DIM / 2)
+#         )
+#         self.rb3 = ResidualBlock(
+#             2 * self.dim, 4 * self.dim, 3, resample="down", hw=int(DIM / 4)
+#         )
+#         self.rb4 = ResidualBlock(
+#             4 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 8)
+#         )
+#         self.rb5 = ResidualBlock(
+#             8 * self.dim, 8 * self.dim, 3, resample="down", hw=int(DIM / 16)
+#         )
+#         self.ln1 = nn.Linear(4 * 4 * 8 * self.dim, 1)
+
+#         self.ln2 = nn.Linear(4 * 4 * 8 * self.dim, self.num_class)
+
+#     def forward(self, input):
+#         output = input.contiguous()
+#         output = output.view(-1, 3, DIM, DIM)
+#         output = self.conv1(output)
+#         output = self.rb1(output)
+#         output = self.rb2(output)
+#         output = self.rb3(output)
+#         output = self.rb4(output)
+#         output = self.rb5(output)
+#         output = output.view(-1, 4 * 4 * 8 * self.dim)
+#         output_wgan = self.ln1(output)
+#         output_wgan = output_wgan.view(-1)
+#         output_congan = self.ln2(output)
+#         return output_wgan, output_congan
+
+
 class GoodGenerator(nn.Module):
     def __init__(self, dim=DIM, output_dim=OUTPUT_DIM):
         super(GoodGenerator, self).__init__()

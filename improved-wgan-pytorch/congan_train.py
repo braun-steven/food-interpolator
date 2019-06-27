@@ -1,9 +1,9 @@
+from matplotlib import pyplot as plt
 from tqdm import tqdm
 import argparse
 import datetime
 import functools
 import os
-import pdb
 import sys
 from time import time
 
@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn.init as init
 import torchvision
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from torch import autograd, nn, optim
 from torch.autograd import grad
 from torchvision import datasets, transforms
@@ -64,19 +64,15 @@ def set_cuda_device(cuda_device_id):
 
 
 def make_multi_gpu(model):
-    multi_gpu = len(args.cuda_device_id) > 1 or args.cuda_device_id[0] == -1
+    num_cuda_devices = torch.cuda.device_count()
+    multi_gpu = num_cuda_devices > 1
 
     # Check if multiple cuda devices are selected
     if multi_gpu:
         logger.info("Using multiple gpus")
-        logger.info("args.cuda_device_id=%s" % args.cuda_device_id)
-        num_cuda_devices = torch.cuda.device_count()
 
-        if args.cuda_device_id[0] == -1:
-            # Select all devices
-            cuda_device_id = list(range(num_cuda_devices))
-        else:
-            cuda_device_id = list(range(len(args.cuda_device_id)))
+        # Select all devices
+        cuda_device_id = list(range(num_cuda_devices))
 
         # Check if multiple cuda devices are available
         if num_cuda_devices > 1:
@@ -219,7 +215,7 @@ def parse_args():
         type=int,
         default=1,
         metavar="N",
-        help="How may iterations to train the critic for.",
+        help="How may iterations to train the generator for.",
     )
     parser.add_argument(
         "--cuda", action="store_true", default=False, help="Enable CUDA training"
@@ -250,6 +246,14 @@ def parse_args():
         default=False,
         help="Force overfitting (set num train samples to 1000)",
     )
+    parser.add_argument(
+        "--make-interpolations",
+        action="store_true",
+        default=False,
+        help="Flag if this run should only generate interpolations. If true, --restore flag must be set.",
+    )
+
+    parser.add_argument("--interpolation-steps", help="Number of interpolation steps.")
 
     args = parser.parse_args()
     ensure_dir(args.result_dir)
@@ -273,7 +277,6 @@ def print_args(args):
 args = parse_args()
 torch.manual_seed(args.seed)
 
-set_cuda_device(args.cuda_device_id)
 print_args(args)
 
 DATA_DIR = args.data_dir
@@ -284,7 +287,7 @@ IMAGE_DATA_SET = (
 )  # change this to something else, e.g. 'imagenets' or 'raw' if your data is just a folder of raw images.
 # If you use lmdb, you'll need to write the loader by yourself, see load_data
 # TRAINING_CLASS = os.listdir(DATA_DIR)
-TRAINING_CLASS = ["pizza", "pancakes"]
+TRAINING_CLASS = ["pizza", "burger"]
 VAL_CLASS = TRAINING_CLASS
 NUM_CLASSES = len(VAL_CLASS)
 
@@ -295,9 +298,6 @@ RESTORE_MODE = (
     args.restore
 )  # if True, it will load saved model from OUT_PATH and continue to train
 START_ITER = 0  # starting iteration
-OUTPUT_PATH = generate_run_base_dir(
-    args.result_dir, args.tag
-)  # output path where result (.e.g drawing images, cost, chart) will be stored
 # MODE = 'wgan-gp'
 DIM = args.dim  # Model dimensionality
 CRITIC_ITERS = args.critic_iters  # How many iterations to train the critic for
@@ -314,10 +314,13 @@ ACGAN_SCALE_G = (
     args.acgan_scale_g
 )  # How to scale generator's ACGAN loss relative to WGAN loss
 LOG_ITER = args.log_iter
-
-
-setup_logging(os.path.join(OUTPUT_PATH, "log.txt"))
 set_dims(DIM, OUTPUT_DIM)
+
+
+OUTPUT_PATH = generate_run_base_dir(
+    args.result_dir, args.tag
+)  # output path where result (.e.g drawing images, cost, chart) will be stored
+setup_logging(os.path.join(OUTPUT_PATH, "log.txt"))
 
 
 def showMemoryUsage(device=1):
@@ -356,15 +359,16 @@ def plot_sample(x, y):
     """
     import matplotlib.pyplot as plt
 
-    x = (x - x.min()) / (x.max() - x.min())
+    # x = (x - x.min()) / (x.max() - x.min())
+    x = x * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
     tensors = torchvision.utils.make_grid(x, nrow=8, padding=1)
     plt.imshow(tensors.permute(1, 2, 0))
     plt.title("y={}".format(y.squeeze().numpy()))
     plt.show()
 
 
-def load_data(path_to_folder, classes):
-    """Load the dataset."""
+def load_data(path_to_folder, classes, batch_size):
+    """load the dataset."""
     # Data transformations
     data_transform = transforms.Compose(
         [
@@ -380,23 +384,21 @@ def load_data(path_to_folder, classes):
 
     def filter_data(path):
         """Filter files by selected classes."""
-        conditions_and = []
-        conditions_or = [True]
-        conditions_and.append(path.split("/")[-2] in classes)
+        # conditions_and = []
+        # conditions_or = [True]
+        # conditions_and.append(path.split("/")[-2] in classes)
 
-        # conditions_or.append(path.endswith("pizza/1001116.jpg"))
-        # conditions_or.append(path.endswith("pizza/1008104.jpg"))
-        # conditions_or.append(path.endswith("pizza/1008144.jpg"))
+        # conditions_or.append(path.endswith("png"))
+        # conditions_or.append(path.endswith("jpg"))
+        # conditions_or.append(path.endswith("jpeg"))
 
-        # conditions_or.append(path.endswith("pancakes/1006982.jpg"))
-        # conditions_or.append(path.endswith("pancakes/1008491.jpg"))
-        # conditions_or.append(path.endswith("pancakes/1009131.jpg"))
-
-        return all(conditions_and) and any(conditions_or)
+        return path.split("/")[-2] in classes and (
+            path.endswith("png") or path.endswith("jpg") or path.endswith("jpeg")
+        )
 
     # Define dataset via imagefolder
     dataset = datasets.ImageFolder(
-        root=path_to_folder, transform=data_transform, is_valid_file=filter_data
+        root=path_to_folder, transform=data_transform  # , is_valid_file=filter_data
     )
     ####### {{{
     # Custom code copied from datasets.folder.DatasetFolder to support partial selection of classes
@@ -404,7 +406,7 @@ def load_data(path_to_folder, classes):
     class_to_idx = {TRAINING_CLASS[i]: i for i in range(NUM_CLASSES)}
 
     samples = datasets.folder.make_dataset(
-        dataset.root, class_to_idx, None, filter_data
+        dataset.root, class_to_idx, extensions=["jpg", "jpeg", "png"]  # , filter_data
     )
     if len(samples) == 0:
         raise (RuntimeError("Found 0 files in subfolders of: " + dataset.root + "\n"))
@@ -418,7 +420,7 @@ def load_data(path_to_folder, classes):
 
     dataset_loader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=batch_size,
         shuffle=True,
         num_workers=5,
         drop_last=True,
@@ -432,18 +434,19 @@ def compute_means_stds(train_loader):
     mean = 0.0
     std = 0.0
     nb_samples = 0.0
+    print("start computing means")
     for data, target in train_loader:
         batch_samples = data.size(0)
         data = data.view(batch_samples, data.size(1), -1)
         mean += data.mean(2).sum(0)
         std += data.std(2).sum(0)
         nb_samples += batch_samples
-        logger.info(nb_samples / len(train_loader.dataset) * 100)
+        print(nb_samples / len(train_loader.dataset) * 100)
 
     mean /= nb_samples
     std /= nb_samples
-    logger.info("Means:", mean)
-    logger.info("Stds:", std)
+    print("Means:", mean)
+    print("Stds:", std)
     exit()
 
 
@@ -481,7 +484,7 @@ def generate_image(netG, noise=None):
         rand_label = np.random.randint(0, NUM_CLASSES, BATCH_SIZE)
         noise = gen_rand_noise_with_label(rand_label)
     with torch.no_grad():
-        noisev = noise
+        noisev = noise.to(device)
     samples = netG(noisev)
     samples = samples.view(BATCH_SIZE, 3, DIM, DIM)
 
@@ -489,6 +492,45 @@ def generate_image(netG, noise=None):
     samples = samples * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
 
     return samples
+
+
+def interp_circular(v1, v2, alpha):
+    """
+    Interpolate between two noise vectors on the hyper-circle.
+
+    Args:
+        v1: Start noise vector.
+        v2: End noise vector.
+        alpha: Linear interpolation factor.
+
+    Returns:
+        np.ndarray: alpha * v1 + (1 - alpha) * v2 / (alpha * ||v1|| + (1 - alpha) * ||v2||)
+    """
+    v = alpha * v1 + (1 - alpha) * v2
+    norm = alpha * torch.norm(v1, dim=1) + (1 - alpha) * torch.norm(v2, dim=1)
+    return v / norm.view(-1, 1)
+
+
+def make_interpolation(netG):
+    """
+    Generate interpolations.
+
+    Args:
+        netG: Generator network.
+    """
+    # Generate samples with class=0
+    noise_start_label = np.zeros(BATCH_SIZE, dtype=int)
+    noise_start = gen_rand_noise_with_label(noise_start_label)
+
+    # Generate samples with class=1
+    noise_end_label = np.ones(BATCH_SIZE, dtype=int)
+    noise_end = gen_rand_noise_with_label(noise_end_label)
+
+    # Alpha from 0 to 1 in 100 steps
+    for alpha in np.linspace(0, 1, num=args.interpolation_steps, endpoint=True):
+        noise = interp_circular(noise_start, noise_end, alpha)
+
+        yield generate_image(netG, noise)
 
 
 def gen_rand_noise_with_label(label=None):
@@ -509,8 +551,8 @@ def gen_rand_noise_with_label(label=None):
 cuda_available = torch.cuda.is_available()
 device = torch.device("cuda" if cuda_available else "cpu")
 
-data_means = torch.tensor([0.5458, 0.4443, 0.3443]).to(device)
-data_stds = torch.tensor([0.2201, 0.2304, 0.2288]).to(device)
+data_means = torch.tensor([0.4494, 0.4235, 0.4196]).to(device)
+data_stds = torch.tensor([0.9628, 0.9711, 1.0579]).to(device)
 
 fixed_label = []
 for c in range(BATCH_SIZE):
@@ -527,9 +569,31 @@ else:
     aG.apply(weights_init)
     aD.apply(weights_init)
 
-LR = 1e-4
+print("Generator #params:    ", count_params(aG))
+for name, param in aG.named_modules():
+    print(">>>>>  ", name, ":    ", count_params(param))
+print("Discriminator #params:", count_params(aD))
+for name, param in aD.named_modules():
+    print(">>>>>  ", name, ":    ", count_params(param))
+
+# Create interpolations
+if args.make_interpolations:
+    aG = aG.to(device)
+    for i, samples in enumerate(make_interpolation(aG)):
+        print("Interpolation", i, "of", args.interpolation_steps)
+        torchvision.utils.save_image(
+            samples, OUTPUT_PATH + "samples_{:06}.png".format(i), nrow=8, padding=2
+        )
+    exit()
+
+
+LR = 2e-4
+
 optimizer_g = torch.optim.Adam(aG.parameters(), lr=LR, betas=(0.5, 0.9))
 optimizer_d = torch.optim.Adam(aD.parameters(), lr=LR, betas=(0.5, 0.9))
+schedule = lambda iter: (END_ITER - iter) / END_ITER * LR
+scheduler_g = torch.optim.lr_scheduler.LambdaLR(optimizer_g, schedule)
+scheduler_d = torch.optim.lr_scheduler.LambdaLR(optimizer_d, schedule)
 
 aux_criterion = nn.CrossEntropyLoss()  # nn.NLLLoss()
 
@@ -538,11 +602,20 @@ aD = aD.to(device)
 aG = make_multi_gpu(aG)
 aD = make_multi_gpu(aD)
 
+print(80 * "=")
+print("Generator")
+print(aG)
+print(80 * "=")
+print("Discriminator")
+print(aD)
+
+
 writer = SummaryWriter()
 # Reference: https://github.com/caogang/wgan-gp/blob/master/gan_cifar10.py
 def train():
-    dataloader = load_data(DATA_DIR, TRAINING_CLASS)
+    dataloader = load_data(DATA_DIR, TRAINING_CLASS, BATCH_SIZE)
     dataiter = iter(dataloader)
+    batch = next(dataiter)
     for iteration in tqdm(range(START_ITER, END_ITER)):
         start_time = time()
         # ---------------------TRAIN G------------------------
@@ -615,32 +688,32 @@ def train():
             w_dist = disc_fake - disc_real
             optimizer_d.step()
             # ------------------VISUALIZATION----------
-            if i == CRITIC_ITERS - 1:
-                writer.add_scalar("data/disc_cost", disc_cost, iteration)
-                # writer.add_scalar('data/disc_fake', disc_fake, iteration)
-                # writer.add_scalar('data/disc_real', disc_real, iteration)
-                writer.add_scalar("data/gradient_pen", gradient_penalty, iteration)
-                writer.add_scalar("data/ac_disc_cost", disc_acgan, iteration)
-                writer.add_scalar("data/ac_gen_cost", aux_errG, iteration)
-                # writer.add_scalar('data/d_conv_weight_mean', [i for i in aD.children()][0].conv.weight.data.clone().mean(), iteration)
-                # writer.add_scalar('data/d_linear_weight_mean', [i for i in aD.children()][-1].weight.data.clone().mean(), iteration)
-                # writer.add_scalar('data/fake_data_mean', fake_data.mean())
-                # writer.add_scalar('data/real_data_mean', real_data.mean())
-                # if iteration %200==99:
-                #    paramsD = aD.named_parameters()
-                #    for name, pD in paramsD:
-                #        writer.add_histogram("D." + name, pD.clone().data.cpu().numpy(), iteration)
-                if iteration % LOG_ITER == (LOG_ITER - 1):
-                    if type(aD) == torch.nn.DataParallel:
-                        body_model = [i for i in aD.children()][0].conv1
-                    else:
-                        body_model = aD.conv1
-                    layer1 = body_model.conv
-                    xyz = layer1.weight.data.clone()
+            # if i == CRITIC_ITERS - 1:
+            #     writer.add_scalar("data/disc_cost", disc_cost, iteration)
+            #     # writer.add_scalar('data/disc_fake', disc_fake, iteration)
+            #     # writer.add_scalar('data/disc_real', disc_real, iteration)
+            #     writer.add_scalar("data/gradient_pen", gradient_penalty, iteration)
+            #     writer.add_scalar("data/ac_disc_cost", disc_acgan, iteration)
+            #     writer.add_scalar("data/ac_gen_cost", aux_errG, iteration)
+            #     # writer.add_scalar('data/d_conv_weight_mean', [i for i in aD.children()][0].conv.weight.data.clone().mean(), iteration)
+            #     # writer.add_scalar('data/d_linear_weight_mean', [i for i in aD.children()][-1].weight.data.clone().mean(), iteration)
+            #     # writer.add_scalar('data/fake_data_mean', fake_data.mean())
+            #     # writer.add_scalar('data/real_data_mean', real_data.mean())
+            #     # if iteration %200==99:
+            #     #    paramsD = aD.named_parameters()
+            #     #    for name, pD in paramsD:
+            #     #        writer.add_histogram("D." + name, pD.clone().data.cpu().numpy(), iteration)
+            #     if iteration % LOG_ITER == (LOG_ITER - 1):
+            #         if type(aD) == torch.nn.DataParallel:
+            #             body_model = [i for i in aD.children()][0].conv1
+            #         else:
+            #             body_model = aD.conv1
+            #         layer1 = body_model.conv
+            #         xyz = layer1.weight.data.clone()
 
-                    tensor = xyz.cpu()
-                    tensors = torchvision.utils.make_grid(tensor, nrow=8, padding=1)
-                    writer.add_image("D/conv1", tensors, iteration)
+            #         tensor = xyz.cpu()
+            #         tensors = torchvision.utils.make_grid(tensor, nrow=8, padding=1)
+            #         writer.add_image("D/conv1", tensors, iteration)
 
         # ---------------VISUALIZATION---------------------
         writer.add_scalar("data/gen_cost", gen_cost, iteration)
@@ -655,7 +728,7 @@ def train():
         lib.plot.plot(OUTPUT_PATH + "train_gen_cost", gen_cost.cpu().data.numpy())
         lib.plot.plot(OUTPUT_PATH + "wasserstein_distance", w_dist.cpu().data.numpy())
         if iteration % LOG_ITER == (LOG_ITER - 1):
-            val_loader = load_data(VAL_DIR, VAL_CLASS)
+            val_loader = load_data(VAL_DIR, VAL_CLASS, BATCH_SIZE)
             dev_disc_costs = []
             for _, images in enumerate(val_loader):
                 if i > 10:
@@ -673,7 +746,7 @@ def train():
             gen_images = generate_image(aG, fixed_noise)
             torchvision.utils.save_image(
                 gen_images,
-                OUTPUT_PATH + "samples_{}.png".format(iteration),
+                OUTPUT_PATH + "samples_{:06}.png".format(iteration),
                 nrow=8,
                 padding=2,
             )
@@ -686,6 +759,10 @@ def train():
             torch.save(aG, OUTPUT_PATH + "generator.pt")
             torch.save(aD, OUTPUT_PATH + "discriminator.pt")
         lib.plot.tick()
+
+        # Reduce learning rate
+        scheduler_g.step()
+        scheduler_d.step()
 
 
 train()
