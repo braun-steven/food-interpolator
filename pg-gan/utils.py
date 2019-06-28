@@ -35,13 +35,14 @@ class Progress:
     """
 
     def __init__(self, n_iter, pmax, batchSizeList):
-        assert n_iter > 0 and isinstance(n_iter, int), 'n_iter must be int >= 1'
-        assert pmax >= 0 and isinstance(pmax, int), 'pmax must be int >= 0'
-        assert isinstance(batchSizeList, list) and \
-               all(isinstance(x, int) for x in batchSizeList) and \
-               all(x > 0 for x in batchSizeList) and \
-               len(batchSizeList) == pmax + 1, \
-            'batchSizeList must be a list of int > 0 and of length pmax+1'
+        assert n_iter > 0 and isinstance(n_iter, int), "n_iter must be int >= 1"
+        assert pmax >= 0 and isinstance(pmax, int), "pmax must be int >= 0"
+        assert (
+            isinstance(batchSizeList, list)
+            and all(isinstance(x, int) for x in batchSizeList)
+            and all(x > 0 for x in batchSizeList)
+            and len(batchSizeList) == pmax + 1
+        ), "batchSizeList must be a list of int > 0 and of length pmax+1"
 
         self.n_iter = n_iter
         self.pmax = pmax
@@ -51,7 +52,7 @@ class Progress:
     def progress(self, epoch, i, total):
         """Update the progress given the epoch and the iteration of the epoch
         Args:
-            epoch (int): batch of images to resize
+            epoch (int): Current epoch
             i (int): iteration in the epoch
             total (int): total number of iterations in the epoch
         """
@@ -86,22 +87,31 @@ class GradientPenalty:
         gamma (float): regularization term of the gradient penalty, augment to minimize "ghosts"
     """
 
-    def __init__(self, batchSize, lambdaGP, gamma=1, device='cpu'):
+    def __init__(self, batchSize, lambdaGP, gamma=1, device="cpu"):
         self.batchSize = batchSize
         self.lambdaGP = lambdaGP
         self.gamma = gamma
         self.device = device
 
     def __call__(self, netD, real_data, fake_data, progress):
-        alpha = torch.rand(self.batchSize, 1, 1, 1, requires_grad=True, device=self.device)
+        alpha = torch.rand(
+            self.batchSize, 1, 1, 1, requires_grad=True, device=self.device
+        )
         # randomly mix real and fake data
         interpolates = real_data + alpha * (fake_data - real_data)
         # compute output of D for interpolated input
         disc_interpolates = netD(interpolates, progress)
         # compute gradients w.r.t the interpolated outputs
-        gradients = grad(outputs=disc_interpolates, inputs=interpolates,
-                         grad_outputs=torch.ones(disc_interpolates.size(), device=self.device),
-                         create_graph=True, retain_graph=True, only_inputs=True)[0].view(self.batchSize, -1)
-        gradient_penalty = (((gradients.norm(2, dim=1) - self.gamma) / self.gamma) ** 2).mean() * self.lambdaGP
+        gradients = grad(
+            outputs=disc_interpolates,
+            inputs=interpolates,
+            grad_outputs=torch.ones(disc_interpolates.size(), device=self.device),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0].view(self.batchSize, -1)
+        gradient_penalty = (
+            ((gradients.norm(2, dim=1) - self.gamma) / self.gamma) ** 2
+        ).mean() * self.lambdaGP
 
         return gradient_penalty
