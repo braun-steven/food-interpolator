@@ -3,13 +3,13 @@
 ## 01.07
 ### Custom Google Food Dataset
 #### Training up to 64x64 resolution
-<img src="results/190624_1913_pizza_burger_cont/samples_015999.png" width="500px"/>
+![](results/190624_1913_pizza_burger_cont/samples_015999.png)
 
 #### Burger to Pizza interpolation
 [Download MP4 File](results/190624_2124_interp/out.mp4)
 
 #### Training up to 256x256 resolution
-<img src="results/190626_1218_pizza_burger_256_single_gpu/samples_002799.png" width="500px"/>
+![](results/190626_1218_pizza_burger_256_single_gpu/samples_002799.png)
 
 ### Architecture Switch: Use Progressive Growing GANs to stabilize training and scale up to higher resoltuions
 #### Setup
@@ -21,16 +21,16 @@
 - Repeat up to 256x256
 
 #### First results: Without Auxillary Classifier
-<img src="Results/190628_1449_pizza_burger_niter50_food/Images/fake_images-0679-p6.00.png" width="500px"/>
+![](Results/190628_1449_pizza_burger_niter50_food/Images/fake_images-0679-p6.00.png)
 
 ##### Loss
-<img src="Results/190628_1449_pizza_burger_niter50_food/Losses/Epoch_679.png" width="500px"/>
+![](Results/190628_1449_pizza_burger_niter50_food/Losses/Epoch_679.png)
 
 #### First results: With Auxillary Classifier
-<img src="Results/190629_1347_pizza_burger_niter100_food-hq/Images/fake_images-2424-p6.00.png" width="500px"/>
+![](Results/190629_1347_pizza_burger_niter100_food-hq/Images/fake_images-2424-p6.00.png)
 
 ##### Loss
-<img src="Results/190629_1347_pizza_burger_niter100_food-hq/Losses/Epoch_2424.png" width="500px"/>
+![](Results/190629_1347_pizza_burger_niter100_food-hq/Losses/Epoch_2424.png)
 
 ### Main Issues
 - Dataset contains many "bad" samples 
