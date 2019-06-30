@@ -1,5 +1,47 @@
 # Milestones
 
+## 01.07
+### Custom Google Food Dataset
+#### Training up to 64x64 resolution
+<img src="results/190624_1913_pizza_burger_cont/samples_015999.png" width="500px"/>
+
+#### Burger to Pizza interpolation
+[Download MP4 File](results/190624_2124_interp/out.mp4)
+
+#### Training up to 256x256 resolution
+<img src="results/190626_1218_pizza_burger_256_single_gpu/samples_002799.png" width="500px"/>
+
+### Architecture Switch: Use Progressive Growing GANs to stabilize training and scale up to higher resoltuions
+#### Setup
+- Use the base setup from [Progressive Growing of GANs for Improved Quality, Stability, and Variation](https://arxiv.org/abs/1710.10196)
+- Start with a resolution of 4x4
+- Train for 100 Epochs
+- Extend to the next resolution with 100 epochs of fade-in
+- Stabilize training at current resolution for another 100 epochs
+- Repeat up to 256x256
+
+#### First results: Without Auxillary Classifier
+<img src="Results/190628_1449_pizza_burger_niter50_food/Images/fake_images-0679-p6.00.png" width="500px"/>
+
+##### Loss
+<img src="Results/190628_1449_pizza_burger_niter50_food/Losses/Epoch_679.png" width="500px"/>
+
+#### First results: With Auxillary Classifier
+<img src="Results/190629_1347_pizza_burger_niter100_food-hq/Images/fake_images-2424-p6.00.png" width="500px"/>
+
+##### Loss
+<img src="Results/190629_1347_pizza_burger_niter100_food-hq/Losses/Epoch_2424.png" width="500px"/>
+
+### Main Issues
+- Dataset contains many "bad" samples 
+  - No burger/pizza in picture
+  - Pizza is in a board
+  - Multiple burgers in the same image
+  - Food is seldomly centered
+
+### Next Steps
+- Use the newly released PizzaGAN dataset for the pizza class: [How to make a pizza: Learning a compositional layer-based GAN model](http://pizzagan.csail.mit.edu/). This dataset contains pizza images of higher quality. 
+
 ## 25.07
 ### Overfitting Results
   - Trained WGAN-GP (with Auxillary Classifier) on the following images:
