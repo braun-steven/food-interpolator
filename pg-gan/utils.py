@@ -100,7 +100,7 @@ class GradientPenalty:
         # randomly mix real and fake data
         interpolates = real_data + alpha * (fake_data - real_data)
         # compute output of D for interpolated input
-        disc_interpolates = netD(interpolates, progress)
+        disc_interpolates, _ = netD(interpolates, progress)
         # compute gradients w.r.t the interpolated outputs
         gradients = grad(
             outputs=disc_interpolates,

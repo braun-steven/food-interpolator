@@ -1,8 +1,21 @@
 # -*- coding: utf-8 -*-
 
 
-def printProgressBar(iteration, total, prefix='', suffix='', decimals=1, length=100,
-                     fill='=', empty=' ', tip='>', begin='[', end=']', done="[DONE]", clear=True):
+def printProgressBar(
+    iteration,
+    total,
+    prefix="",
+    suffix="",
+    decimals=1,
+    length=100,
+    fill="=",
+    empty=" ",
+    tip=">",
+    begin="[",
+    end="]",
+    done="[DONE]",
+    clear=True,
+):
     """
     Print iterations progress.
     Call in a loop to create terminal progress bar
@@ -27,16 +40,21 @@ def printProgressBar(iteration, total, prefix='', suffix='', decimals=1, length=
     if iteration != total:
         bar = bar + tip
     bar = bar + empty * (length - filledLength - len(tip))
-    display = '\r{prefix}{begin}{bar}{end} {percent}%{suffix}' \
-        .format(prefix=prefix, begin=begin, bar=bar, end=end, percent=percent, suffix=suffix)
-    print(display, end=''),  # comma after print() required for python 2
+    display = "\r{prefix}{begin}{bar}{end} {percent}%{suffix}".format(
+        prefix=prefix, begin=begin, bar=bar, end=end, percent=percent, suffix=suffix
+    )
+    print(display, end=""),  # comma after print() required for python 2
     if iteration == total:  # print with newline on complete
-        if clear:  # display given complete message with spaces to 'erase' previous progress bar
-            finish = '\r{prefix}{done}'.format(prefix=prefix, done=done)
-            if hasattr(str, 'decode'):  # handle python 2 non-unicode strings for proper length measure
-                finish = finish.decode('utf-8')
-                display = display.decode('utf-8')
-            clear = ' ' * max(len(display) - len(finish), 0)
+        if (
+            clear
+        ):  # display given complete message with spaces to 'erase' previous progress bar
+            finish = "\r{prefix}{done}".format(prefix=prefix, done=done)
+            if hasattr(
+                str, "decode"
+            ):  # handle python 2 non-unicode strings for proper length measure
+                finish = finish.decode("utf-8")
+                display = display.decode("utf-8")
+            clear = " " * max(len(display) - len(finish), 0)
             print(finish + clear)
         else:
-            print('')
+            print("")

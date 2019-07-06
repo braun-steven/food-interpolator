@@ -143,6 +143,7 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         # resolution of output as 4 * 2^maxRes: 0 -> 4x4, 1 -> 8x8, ..., 8 -> 1024x1024
         self.max_res = max_res
+        self.nch = nch
 
         # input convolutions
         self.fromRGBs = nn.ModuleList()
@@ -212,6 +213,9 @@ class Discriminator(nn.Module):
                 )
             )
 
+        # AC GAN Output
+        self.ac_out = nn.Linear(nch * 32 * 4 * 4, 1)
+
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.normal_(m.weight, 0, 1) if ws else nn.init.kaiming_normal_(
@@ -253,7 +257,8 @@ class Discriminator(nn.Module):
             )
         )
 
-        return y.squeeze()
+        ac_gan_output = self.ac_out(y0.view(-1, self.nch * 32 * 4 * 4))
+        return y.squeeze(), ac_gan_output.squeeze().sigmoid()
 
 
 if __name__ == "__main__":
@@ -266,10 +271,11 @@ if __name__ == "__main__":
         return n
 
     # test in original configuration
-    nch = 16
-    G = Generator(nch=nch, ws=True, pn=True).to(device)
+    nch = 8
+    max_res = 5
+    G = Generator(max_res, nch=nch, ws=True, pn=True).to(device)
     print(G)
-    D = Discriminator(nch=nch, ws=True).to(device)
+    D = Discriminator(max_res, nch=nch, ws=True).to(device)
     print(D)
     z = torch.randn(4, nch * 32, 1, 1, device=device)
 
@@ -277,8 +283,10 @@ if __name__ == "__main__":
         print("##### Testing Generator #####")
         print(f"Generator has {param_number(G)} parameters")
         for i in range((G.max_res + 1) * 2):
-            print(i / 2, " -> ", G(z, i / 2).size())
+            print(i / 2, " -> ", G(z, i / 2)[0].size())
+            print(i / 2, " -> ", G(z, i / 2)[1].size())
         print("##### Testing Discriminator #####")
         print(f"Generator has {param_number(D)} parameters")
         for i in range((G.max_res + 1) * 2):
-            print(i / 2, " -> ", D(G(z, i / 2), i / 2).size())
+            print(i / 2, " -> ", D(G(z, i / 2), i / 2)[0].size())
+            print(i / 2, " -> ", D(G(z, i / 2), i / 2)[1].size())
