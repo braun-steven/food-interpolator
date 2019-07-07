@@ -1,5 +1,16 @@
 # Milestones
 
+## 08.07
+### First Interpolations
+![](interps/seed-pizza=112/seed-burger=14/out.gif)
+![](interps/seed-pizza=112/seed-burger=16/out.gif)
+![](interps/seed-pizza=112/seed-burger=103/out.gif)
+![](interps/seed-pizza=112/seed-burger=48/out.gif)
+
+### Todo
+- Add circular interpolations
+- Create visualization of progressive growing
+
 ## 01.07
 ### Custom Google Food Dataset
 #### Training up to 64x64 resolution
