@@ -1,3 +1,4 @@
+import random
 import tqdm
 import traceback
 import shutil
@@ -103,7 +104,6 @@ def generate_images(n, tag, label):
             batch_size=savenum,
             size=opt.nch * 32,
             device=DEVICE,
-            # label=torch.arange(savenum) % 2,
             label=label,
         )
         fake_images = G(z_save)
@@ -122,12 +122,12 @@ def generate_images(n, tag, label):
         )
 
 
-def save(fake_images, path):
+def save(fake_images, path, nrow=8):
     fake_images = fake_images * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
     save_image(
         fake_images,
         path,
-        nrow=8,
+        nrow=nrow,
         pad_value=0,
         normalize=True,
         range=(0, 1),
@@ -145,10 +145,10 @@ def interp_circular(v1, v2, alpha):
         alpha: Linear interpolation factor.
 
     Returns:
-        np.ndarray: alpha * v1 + (1 - alpha) * v2 / (alpha * ||v1|| + (1 - alpha) * ||v2||)
+        np.ndarray: alpha * v2 + (1 - alpha) * v1 / (alpha * ||v2|| + (1 - alpha) * ||v1||)
     """
-    v = alpha * v1 + (1 - alpha) * v2
-    norm = alpha * torch.norm(v1, dim=1) + (1 - alpha) * torch.norm(v2, dim=1)
+    v = alpha * v2 + (1 - alpha) * v1
+    norm = alpha * torch.norm(v2, dim=1) + (1 - alpha) * torch.norm(v1, dim=1)
     return v / norm.view(-1, 1, 1, 1) * np.sqrt(2)
 
 
@@ -165,38 +165,49 @@ def gen_from_seed(seed: int, cls):
     return G(z_save)
 
 
-def interpolate_between_seeds(seed_start, label_start, seed_end, label_end):
+def interpolate_between_seeds_iter(seed_start, seed_end):
     basedir = os.path.join(
         "interps", f"seed-pizza={seed_start}", f"seed-burger={seed_end}"
     )
     ensure_dir(basedir)
     # Generate samples with class=0
-    noise_start_label = torch.ones(1) * label_start
-    set_seed(seed_start)
-    noise_start = hypersphere(
-        num_classes=2,
-        batch_size=1,
-        size=opt.nch * 32,
-        device=DEVICE,
-        label=noise_start_label,
-    )
+    noise_start_label = torch.ones(1)
+
+    noise_start = []
+    for seed in seed_start:
+        set_seed(seed)
+        noise_start.append(
+            hypersphere(
+                num_classes=2,
+                batch_size=1,
+                size=opt.nch * 32,
+                device=DEVICE,
+                label=noise_start_label,
+            )
+        )
+    noise_start = torch.cat(noise_start, dim=0)
 
     # Generate samples with class=1
-    noise_end_label = torch.ones(1) * label_end
-    set_seed(seed_end)
-    noise_end = hypersphere(
-        num_classes=2,
-        batch_size=1,
-        size=opt.nch * 32,
-        device=DEVICE,
-        label=noise_end_label,
-    )
+    noise_end_label = torch.ones(1)
+    noise_end = []
+    for seed in seed_end:
+        set_seed(seed)
+        noise_end.append(
+            hypersphere(
+                num_classes=2,
+                batch_size=1,
+                size=opt.nch * 32,
+                device=DEVICE,
+                label=noise_end_label,
+            )
+        )
+    noise_end = torch.cat(noise_end, dim=0)
 
     # Alpha from 0 to 1 in 300 steps
-    for idx, alpha in tqdm.tqdm(enumerate(np.linspace(0, 1, num=300, endpoint=True))):
+    for idx, alpha in enumerate(np.linspace(0, 1, num=150, endpoint=True)):
         noise = interp_circular(noise_start, noise_end, alpha).to(DEVICE)
         fake = G(noise)
-        save(fake, path=os.path.join(basedir, f"interp-{idx:>03}.png"))
+        yield fake
 
 
 def gen_multiple_seeds(n):
@@ -266,9 +277,11 @@ if __name__ == "__main__":
 
     savenum = 64
 
-    data_means = torch.tensor([2.0581, 2.0569, 2.2445]).to(DEVICE)
-    data_stds = torch.tensor([1.0557, 1.1210, 1.2443]).to(DEVICE)
+    data_means = torch.tensor([0.6250, 0.5109, 0.4063]).to(DEVICE)
+    data_stds = torch.tensor([0.2323, 0.2430, 0.2522]).to(DEVICE)
 
+    ensure_dir("interpolations")
+    set_seed(0)
     with torch.no_grad():
         # generate_images(1, "burger", label=torch.ones(savenum))
         # generate_images(1, "pizza", label=torch.zeros(savenum))
@@ -276,41 +289,121 @@ if __name__ == "__main__":
         # make_interpolation(G, 32)
         # gen_multiple_seeds(1000)
         good_pizzas = [
-            (502, 0),
-            (158, 0),
-            (341, 0),
-            (574, 0),
-            (998, 0),
-            (9, 1),
-            (97, 1),
-            (112, 1),
-            (141, 1),
-            (184, 1),
-            (239, 1),
-            (282, 1),
-            (315, 1),
-            (356, 1),
-            (411, 1),
-            (545, 1),
-            (597, 1),
-            (663, 1),
-            (712, 1),
-            (742, 1),
-            (961, 1),
+            0,
+            9,
+            33,
+            47,
+            997,
+            88,
+            87,
+            152,
+            174,
+            209,
+            222,
+            272,
+            276,
+            367,
+            397,
+            442,
+            537,
+            565,
+            597,
+            623,
+            665,
+            693,
+            811,
+            973,
+            997,
         ]
         good_burgers = [
-            (14, 1),
-            (16, 1),
-            (48, 1),
-            (60, 1),
-            (103, 1),
-            (915, 1),
-            (912, 1),
-            (802, 1),
-            (768, 1),
-            (740, 1),
-            (579, 1),
+            54,
+            66,
+            80,
+            94,
+            194,
+            217,
+            251,
+            255,
+            266,
+            277,
+            310,
+            325,
+            349,
+            353,
+            404,
+            446,
+            474,
+            497,
+            516,
+            520,
+            568,
+            612,
+            626,
+            650,
+            669,
+            677,
+            840,
+            857,
+            885,
+            918,
         ]
-        for seed_start, label_start in tqdm.tqdm(good_pizzas):
-            for seed_end, label_end in good_burgers:
-                interpolate_between_seeds(seed_start, label_start, seed_end, label_end)
+        rand = random.Random(0)
+
+        def get_random(size, a, b):
+            rand.shuffle(a)
+            arand = a[:size]
+            rand.shuffle(b)
+            brand = b[:size]
+            return arand, brand
+
+        def interp(pizza_seeds, burger_seed, running_counter, d):
+            # Get interpolations
+            for fake_interp in interpolate_between_seeds_iter(pizza_seeds, burger_seed):
+                path = os.path.join(d, f"fake-{running_counter:>04}.png")
+                save(fake_interp, path, nrow=2)
+                running_counter += 1
+            return running_counter
+
+        def make_interpolations(outpath, a, b):
+
+            d = outpath
+            ensure_dir(d)
+            N = 4
+            initial_pizza, initial_burger = get_random(N, a, b)
+            interp_count = 0
+            interp_count = interp(initial_pizza, initial_burger, interp_count, d)
+            prev_seeds = initial_burger
+            # Make dir
+            for i in tqdm.trange(20):
+                rand_pizza_seeds, rand_burger_seeds = get_random(N, a, b)
+                print(f"Seed 1: {rand_pizza_seeds}")
+                print(f"Seed 2: {rand_burger_seeds}")
+                interp_count = interp(prev_seeds, rand_pizza_seeds, interp_count, d)
+                interp_count = interp(
+                    rand_pizza_seeds, rand_burger_seeds, interp_count, d
+                )
+                prev_seeds = rand_burger_seeds
+
+            interp_count = interp(prev_seeds, initial_pizza, interp_count, d)
+
+        print("Starting pizza to burger interpolations")
+        make_interpolations(
+            "interpolations/pizza-burger-cycle", good_pizzas, good_burgers
+        )
+
+        # print("Starting pizza to pizza interpolations")
+        # make_interpolations(
+        #     "interpolations/pizza-pizza-cycle", good_pizzas, good_pizzas
+        # )
+        # print("Starting burger to burger interpolations")
+        # make_interpolations(
+        #     "interpolations/burger-burger-cycle", good_burgers, good_burgers
+        # )
+        # print("Starting totally random interpolations")
+        # make_interpolations(
+        #     "interpolations/random", list(range(100000)), list(range(100000))
+        # )
+
+        # for seed_start in tqdm.tqdm(good_pizzas):
+        #     for seed_end in good_burgers:
+        #         interpolate_between_seeds_iter(seed_start, seed_end)

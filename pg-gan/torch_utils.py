@@ -147,6 +147,7 @@ def set_cuda_device(cuda_device_id):
         cuda_device_id (List[int]): List of physical cuda device ids.
 
     """
+    key = "CUDA_VISIBLE_DEVICES"
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join([str(x) for x in cuda_device_id])
 
 

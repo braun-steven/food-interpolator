@@ -462,7 +462,7 @@ def calc_gradient_penalty(netD, real_data, fake_data):
     interpolates = alpha * real_data.detach() + ((1 - alpha) * fake_data.detach())
     interpolates = interpolates.to(device)
     interpolates.requires_grad_(True)
-    disc_interpolates, _ = netD(interpolates)
+    disc_interpolates = netD(interpolates)
 
     # Get gradients
     gradients = autograd.grad(

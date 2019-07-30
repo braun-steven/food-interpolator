@@ -1,40 +1,46 @@
-import traceback
-import shutil
 import argparse
-import os
 import copy
+import os
+import pickle
+import shutil
+import traceback
+from os.path import join
+from time import time
+
 import matplotlib
-from torch_utils import generate_run_base_dir
-import torchvision
 
 # matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import numpy as np
-
-from torch import nn
 import torch
+import torchvision
+from torch import nn
+from torch.backends import cudnn
 from torch.nn import functional as F
-from torch_utils import make_multi_gpu
-from torch_utils import save_args
-from torch_utils import set_seed
-from torch_utils import set_cuda_device
-from torchvision import datasets
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torch.backends import cudnn
-from torchvision import transforms
-from torchvision.utils import save_image
+from torchvision import datasets, transforms
 from torchvision.datasets import MNIST
+from torchvision.utils import save_image
 
-from model import Generator, Discriminator
+from model import Discriminator, Generator
 from progressBar import printProgressBar
-from utils import weights_init, GradientPenalty, Progress, exp_mov_avg, hypersphere
-
-from time import time
+from torch_utils import (
+    generate_run_base_dir,
+    make_multi_gpu,
+    save_args,
+    set_cuda_device,
+    set_seed,
+    setup_logging,
+)
+from utils import GradientPenalty, Progress, exp_mov_avg, hypersphere, weights_init
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--restore", help="path to the restore directory", metavar="DIR"
+    )
     parser.add_argument(
         "--data", type=str, default="DATA", help="directory containing the data"
     )
@@ -89,12 +95,6 @@ def parse_args():
         help="epsilon drift for discriminator loss",
     )
     parser.add_argument(
-        "--aux-lambda",
-        type=float,
-        default=1,
-        help="Auxillary classifier loss lambda value",
-    )
-    parser.add_argument(
         "--saveimages",
         type=int,
         default=1,
@@ -107,7 +107,7 @@ def parse_args():
         help="Max resolution. 0->4x4, 1->8x8, 3->32x32, 5->128x128 ...",
     )
     parser.add_argument(
-        "--savenum", type=int, default=16, help="number of examples images to save"
+        "--savenum", type=int, default=32, help="number of examples images to save"
     )
     parser.add_argument(
         "--savemodel",
@@ -132,6 +132,30 @@ def parse_args():
     )
 
     return parser.parse_args()
+
+
+def plot_grid(images, data_stds, data_means):
+    images = images * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
+    grid = torchvision.utils.make_grid(
+        images,
+        nrow=8,
+        padding=1,
+        pad_value=0,
+        normalize=True,
+        range=(0, 1),
+        scale_each=True,
+    )
+    # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+    ndarr = (
+        grid.mul_(255)
+        .add_(0.5)
+        .clamp_(0, 255)
+        .permute(1, 2, 0)
+        .to("cpu", torch.uint8)
+        .numpy()
+    )
+    plt.imshow(ndarr)
+    plt.show()
 
 
 def hypersphere(num_classes, batch_size, size, device, label=None):
@@ -259,26 +283,37 @@ def main(opt):
     if not os.path.exists(opt.outd):
         os.makedirs(opt.outd)
     for f in [opt.outf, opt.outl, opt.outm]:
-        if not os.path.exists(os.path.join(opt.outd, f)):
-            os.makedirs(os.path.join(opt.outd, f))
+        if not os.path.exists(join(opt.outd, f)):
+            os.makedirs(join(opt.outd, f))
 
     # Model creation and init
-    G = Generator(
-        max_res=MAX_RES, nch=opt.nch, nc=n_channels, bn=opt.BN, ws=opt.WS, pn=opt.PN
-    ).to(DEVICE)
-    D = Discriminator(
-        max_res=MAX_RES, nch=opt.nch, nc=n_channels, bn=opt.BN, ws=opt.WS
-    ).to(DEVICE)
+    if opt.restore:
+        with open(join(opt.restore, "info.pickle"), "rb") as handle:
+            old_run = pickle.load(handle)
+        epoch = old_run["epoch"]
+        nch = old_run["nch"]
+        G = torch.load(join(opt.restore, f"G_nch-{nch}_epoch-{epoch}.pth")).to(DEVICE)
+        Gs = torch.load(join(opt.restore, f"Gs_nch-{nch}_epoch-{epoch}.pth")).to(DEVICE)
+        D = torch.load(join(opt.restore, f"D_nch-{nch}_epoch-{epoch}.pth")).to(DEVICE)
+    else:
+        G = Generator(
+            max_res=MAX_RES, nch=opt.nch, nc=n_channels, bn=opt.BN, ws=opt.WS, pn=opt.PN
+        ).to(DEVICE)
+        D = Discriminator(
+            max_res=MAX_RES, nch=opt.nch, nc=n_channels, bn=opt.BN, ws=opt.WS
+        ).to(DEVICE)
+
     devices = list(range(torch.cuda.device_count()))
     if not opt.WS:
         # weights are initialized by WScale layers to normal if WS is used
         G.apply(weights_init)
         D.apply(weights_init)
 
+    Gs = copy.deepcopy(G)
     if torch.cuda.device_count() > 1:
         G = make_multi_gpu(G, devices)
         D = make_multi_gpu(D, devices)
-    Gs = copy.deepcopy(G)
+        Gs = make_multi_gpu(Gs, devices)
 
     lr = 1e-3
     betas = (0.0, 0.99)
@@ -287,14 +322,21 @@ def main(opt):
 
     GP = GradientPenalty(opt.batchSizes[0], opt.lambdaGP, opt.gamma, device=DEVICE)
 
-    epoch = 0
-    global_step = 0
-    total = 2
+    # Restore epoch/gloabl_step/total from prev. run if in restore mode
+    if opt.restore:
+        epoch = old_run["epoch"]
+        global_step = old_run["global_step"]
+        total = old_run["total"]
+    else:
+        epoch = 0
+        global_step = 0
+        total = 2
     d_losses = np.array([])
     d_losses_W = np.array([])
     g_losses = np.array([])
     P = Progress(opt.n_iter, MAX_RES, opt.batchSizes)
 
+    set_seed(0)
     z_save = hypersphere(
         num_classes=NUM_CLASSES,
         batch_size=opt.savenum,
@@ -307,50 +349,39 @@ def main(opt):
     GP.batchSize = P.batchSize
 
     # Creation of DataLoader
+    # data_loader = DataLoader(
+    #     dataset,
+    #     batch_size=P.batchSize,
+    #     shuffle=opt.overfit == False,
+    #     num_workers=opt.workers,
+    #     drop_last=True,
+    #     pin_memory=True,
+    #     sampler=torch.utils.data.SubsetRandomSampler(range(100))
+    #     if opt.overfit
+    #     else None,
+    # )
+
+    n_datapoints = len(dataset)
+    rand_idxs = np.arange(n_datapoints)
+    subset = 4000
+    np.random.shuffle(rand_idxs)
+    sampler = torch.utils.data.SubsetRandomSampler(rand_idxs[:subset])
     data_loader = DataLoader(
         dataset,
         batch_size=P.batchSize,
-        shuffle=opt.overfit == False,
+        shuffle=False,
         num_workers=opt.workers,
         drop_last=True,
         pin_memory=True,
-        sampler=torch.utils.data.SubsetRandomSampler(range(100))
-        if opt.overfit
-        else None,
+        sampler=sampler,
     )
 
     # compute_means_stds(data_loader)
-
-    def plot_grid(images):
-        images = images * data_stds.view(1, 3, 1, 1) + data_means.view(1, 3, 1, 1)
-        grid = torchvision.utils.make_grid(
-            images,
-            nrow=8,
-            padding=1,
-            pad_value=0,
-            normalize=True,
-            range=(0, 1),
-            scale_each=True,
-        )
-        # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
-        ndarr = (
-            grid.mul_(255)
-            .add_(0.5)
-            .clamp_(0, 255)
-            .permute(1, 2, 0)
-            .to("cpu", torch.uint8)
-            .numpy()
-        )
-        plt.imshow(ndarr)
-        plt.show()
-
-    aux_criterion = nn.BCELoss()
 
     while True:
         t0 = time()
 
         lossEpochG = []
-        lossEpochG_aux = []
         lossEpochD = []
         lossEpochD_W = []
 
@@ -363,13 +394,22 @@ def main(opt):
             # update batch-size in gradient penalty
             GP.batchSize = P.batchSize
             # modify DataLoader at each change in resolution to vary the batch-size as the resolution increases
+            # data_loader = DataLoader(
+            #     dataset,
+            #     batch_size=P.batchSize,
+            #     shuffle=True,
+            #     num_workers=opt.workers,
+            #     drop_last=True,
+            #     pin_memory=True,
+            # )
             data_loader = DataLoader(
                 dataset,
                 batch_size=P.batchSize,
-                shuffle=True,
+                shuffle=False,
                 num_workers=opt.workers,
                 drop_last=True,
                 pin_memory=True,
+                sampler=sampler,
             )
 
         total = len(data_loader)
@@ -403,13 +443,12 @@ def main(opt):
                 fake_images = G(z, P.p)
 
             # compute scores for real images
-            D_real, D_aux_real = D(images, P.p)
+            D_real = D(images, P.p)
             D_realm = D_real.mean()
 
             # compute scores for fake images
-            D_fake, D_aux_fake = D(fake_images, P.p)
+            D_fake = D(fake_images, P.p)
             D_fakem = D_fake.mean()
-            D_aux_error = aux_criterion(D_aux_fake, label) * opt.aux_lambda
             # compute gradient penalty for WGAN-GP as defined in the article
             gradient_penalty = GP(D, images.data, fake_images.data, P.p)
 
@@ -419,8 +458,7 @@ def main(opt):
             # Backprop + Optimize
             d_loss = D_fakem - D_realm
             d_loss_W = d_loss + gradient_penalty + drift
-            d_loss_W_aux = d_loss_W + D_aux_error
-            d_loss_W_aux.backward()
+            d_loss_W.backward()
             optimizerD.step()
 
             lossEpochD.append(d_loss.item())
@@ -440,19 +478,17 @@ def main(opt):
             )
             fake_images = G(z, P.p)
             # compute scores with new fake images
-            G_fake, G_aux_fake = D(fake_images, P.p)
+            G_fake = D(fake_images, P.p)
             G_fakem = G_fake.mean()
-            G_aux_error = aux_criterion(G_aux_fake, label) * opt.aux_lambda
 
             # no need to compute D_real as it does not affect G
-            g_loss = -G_fakem + G_aux_error
+            g_loss = -G_fakem
 
             # Optimize
             g_loss.backward()
             optimizerG.step()
 
             lossEpochG.append(g_loss.item())
-            lossEpochG_aux.append(G_aux_error.item())
 
             # update Gs with exponential moving average
             exp_mov_avg(Gs, G, alpha=0.999, global_step=global_step)
@@ -464,7 +500,6 @@ def main(opt):
                 prefix=f"Epoch {epoch:< 4} ",
                 suffix=f", d_loss: {d_loss.item():> 6.3f}"
                 f", d_loss_W: {d_loss_W.item():> 6.3f}"
-                f", d_loss_aux: {D_aux_error:> 6.3f}"
                 f", GP: {gradient_penalty.item():> 6.3f}"
                 f", progress: {P.p:.2f}",
             )
@@ -474,7 +509,6 @@ def main(opt):
             total,
             done=f"Epoch [{epoch:< 4}]  d_loss: {np.mean(lossEpochD):> 6.3f}"
             f", d_loss_W: {np.mean(lossEpochD_W):> 6.3f}"
-            f", d_loss_aux: {np.mean(lossEpochG_aux):.3f}"
             f", progress: {P.p:.2f}, time: {time() - t0:.2f}s",
         )
 
@@ -482,9 +516,9 @@ def main(opt):
         d_losses_W = np.append(d_losses_W, lossEpochD_W)
         g_losses = np.append(g_losses, lossEpochG)
 
-        np.save(os.path.join(opt.outd, opt.outl, "d_losses.npy"), d_losses)
-        np.save(os.path.join(opt.outd, opt.outl, "d_losses_W.npy"), d_losses_W)
-        np.save(os.path.join(opt.outd, opt.outl, "g_losses.npy"), g_losses)
+        np.save(join(opt.outd, opt.outl, "d_losses.npy"), d_losses)
+        np.save(join(opt.outd, opt.outl, "d_losses_W.npy"), d_losses_W)
+        np.save(join(opt.outd, opt.outl, "g_losses.npy"), g_losses)
 
         cudnn.benchmark = False
         if not (epoch + 1) % opt.saveimages:
@@ -502,7 +536,7 @@ def main(opt):
             ax.set_ylabel("Loss")
             ax.set_title(f"Progress: {P.p:.2f}")
             plt.savefig(
-                os.path.join(opt.outd, opt.outl, f"Epoch_{epoch}.png"),
+                join(opt.outd, opt.outl, f"Epoch_{epoch}.png"),
                 dpi=200,
                 bbox_inches="tight",
             )
@@ -523,9 +557,7 @@ def main(opt):
                         fake_images = F.upsample(fake_images, 4 * 2 ** MAX_RES)
             save_image(
                 fake_images,
-                os.path.join(
-                    opt.outd, opt.outf, f"fake_images-{epoch:04d}-p{P.p:.2f}.png"
-                ),
+                join(opt.outd, opt.outf, f"fake_images-{epoch:04d}-p{P.p:.2f}.png"),
                 nrow=8,
                 pad_value=0,
                 normalize=True,
@@ -535,17 +567,23 @@ def main(opt):
 
         if P.p >= P.pmax and not epoch % opt.savemodel:
             torch.save(
-                G,
-                os.path.join(opt.outd, opt.outm, f"G_nch-{opt.nch}_epoch-{epoch}.pth"),
+                G, join(opt.outd, opt.outm, f"G_nch-{opt.nch}_epoch-{epoch}.pth")
             )
             torch.save(
-                D,
-                os.path.join(opt.outd, opt.outm, f"D_nch-{opt.nch}_epoch-{epoch}.pth"),
+                D, join(opt.outd, opt.outm, f"D_nch-{opt.nch}_epoch-{epoch}.pth")
             )
             torch.save(
-                Gs,
-                os.path.join(opt.outd, opt.outm, f"Gs_nch-{opt.nch}_epoch-{epoch}.pth"),
+                Gs, join(opt.outd, opt.outm, f"Gs_nch-{opt.nch}_epoch-{epoch}.pth")
             )
+            # Save epoch and global step
+            d = {
+                "global_step": global_step,
+                "epoch": epoch,
+                "nch": opt.nch,
+                "total": total,
+            }
+            with open(join(opt.outd, opt.outm, "info.pickle"), "wb") as handle:
+                pickle.dump(d, handle)
 
         epoch += 1
 
@@ -553,6 +591,7 @@ def main(opt):
 if __name__ == "__main__":
     opt = parse_args()
     set_cuda_device(opt.cuda_device_id)
+
     if len(opt.cuda_device_id) > 1:
         n_dev = len(opt.cuda_device_id)
         opt.batchSizes = [i * n_dev for i in opt.batchSizes]

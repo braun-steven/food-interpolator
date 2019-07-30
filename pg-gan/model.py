@@ -213,9 +213,6 @@ class Discriminator(nn.Module):
                 )
             )
 
-        # AC GAN Output
-        self.ac_out = nn.Linear(nch * 32 * 4 * 4, 1)
-
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.normal_(m.weight, 0, 1) if ws else nn.init.kaiming_normal_(
@@ -257,8 +254,7 @@ class Discriminator(nn.Module):
             )
         )
 
-        ac_gan_output = self.ac_out(y0.view(-1, self.nch * 32 * 4 * 4))
-        return y.squeeze(), ac_gan_output.squeeze().sigmoid()
+        return y.squeeze()
 
 
 if __name__ == "__main__":
