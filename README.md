@@ -14,16 +14,16 @@ We want to achieve fluid transitions between e.g.:
 Video results can be found [here](https://www.youtube.com/watch?v=LndGGbR4uxY&list=PLVCWvLHvDaenJrE2N-Akwo7-1kGN5vd5W).
 
 ### Progressive Growing
-[<img src="https://img.youtube.com/vi/V7n1M14jKPM/maxresdefault.jpg" width="50%">](https://youtu.be/V7n1M14jKPM)
+[<img src="https://img.youtube.com/vi/V7n1M14jKPM/hqdefault.jpg" width="50%">](https://youtu.be/V7n1M14jKPM)
 
 ### Pizza to Pizza
-[<img src="https://img.youtube.com/vi/MSPZ56zy-OU/maxresdefault.jpg" width="50%">](https://youtu.be/MSPZ56zy-OU)
+[<img src="https://img.youtube.com/vi/MSPZ56zy-OU/hqdefault.jpg" width="50%">](https://youtu.be/MSPZ56zy-OU)
 
 ### Burger to Burger
-[<img src="https://img.youtube.com/vi/LndGGbR4uxY/maxresdefault.jpg" width="50%">](https://youtu.be/LndGGbR4uxY)
+[<img src="https://img.youtube.com/vi/LndGGbR4uxY/hqdefault.jpg" width="50%">](https://youtu.be/LndGGbR4uxY)
 
 ### Random Latent Space
-[<img src="https://img.youtube.com/vi/n0ucsR-ko60/maxresdefault.jpg" width="50%">](https://youtu.be/n0ucsR-ko60)
+[<img src="https://img.youtube.com/vi/n0ucsR-ko60/hqdefault.jpg" width="50%">](https://youtu.be/n0ucsR-ko60)
 
 ## Code Base
 The code is based on a [PyTorch implementation](https://github.com/jalola/improved-wgan-pytorch) of [Improved Training of Wasserstein GAN](https://arxiv.org/abs/1704.00028) and a [PyTorch implementation of Progressive Growing of GANs](https://github.com/jeromerony/Progressive_Growing_of_GANs-PyTorch)
