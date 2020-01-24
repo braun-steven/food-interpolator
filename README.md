@@ -13,16 +13,16 @@ We want to achieve fluid transitions between e.g.:
 ## Results
 Video results can be found [here](https://www.youtube.com/watch?v=LndGGbR4uxY&list=PLVCWvLHvDaenJrE2N-Akwo7-1kGN5vd5W).
 
-### Progressive Growing
+### Progressive Growing (Video)
 [<img src="https://img.youtube.com/vi/V7n1M14jKPM/hqdefault.jpg" width="50%">](https://youtu.be/V7n1M14jKPM)
 
-### Pizza to Pizza
+### Pizza to Pizza (Video)
 [<img src="https://img.youtube.com/vi/MSPZ56zy-OU/hqdefault.jpg" width="50%">](https://youtu.be/MSPZ56zy-OU)
 
-### Burger to Burger
+### Burger to Burger (Video)
 [<img src="https://img.youtube.com/vi/LndGGbR4uxY/hqdefault.jpg" width="50%">](https://youtu.be/LndGGbR4uxY)
 
-### Random Latent Space
+### Random Latent Space (Video)
 [<img src="https://img.youtube.com/vi/n0ucsR-ko60/hqdefault.jpg" width="50%">](https://youtu.be/n0ucsR-ko60)
 
 ## Code Base
